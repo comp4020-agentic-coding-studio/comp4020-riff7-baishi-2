@@ -2,32 +2,43 @@ import type { APIRoute } from "astro";
 import { ValidationError, addException } from "../../lib/db";
 import { bus } from "../../lib/events";
 
-// The write half of the roster: reschedule one crit group's session for one
-// teaching week. A plain HTML form POSTs here; the 303 redirect makes it
-// work with no client-side JavaScript — the submitting tab re-renders from
-// SQLite, and every other open tab hears about the change over the SSE
-// stream (see api/events.ts) and reloads to pick it up.
+// A plain HTML form POSTs here; the 303 redirect lands back on the same
+// week's grid with the moved session highlighted. Other open tabs hear about
+// the change over the SSE stream (see api/events.ts).
 export const POST: APIRoute = async ({ request, redirect }) => {
   const form = await request.formData();
   const field = (name: string) => String(form.get(name) ?? "").trim();
+  const input = {
+    critGroupId: Number(field("critGroupId")),
+    week: Number(field("week")),
+    day: field("day"),
+    startTime: field("startTime"),
+    endTime: field("endTime"),
+    room: field("room"),
+    reason: field("reason"),
+  };
 
   try {
-    addException({
-      critGroupId: Number(field("critGroupId")),
-      week: Number(field("week")),
-      day: field("day"),
-      startTime: field("startTime"),
-      endTime: field("endTime"),
-      room: field("room"),
-      reason: field("reason"),
-    });
+    addException(input);
   } catch (error) {
     if (error instanceof ValidationError) {
-      return redirect(`/?error=${encodeURIComponent(error.message)}`, 303);
+      // Send the draft back so a validation error never costs the user their typing.
+      const query = new URLSearchParams({ error: error.message });
+      if (Number.isInteger(input.week)) query.set("week", String(input.week));
+      if (Number.isInteger(input.critGroupId)) query.set("group", String(input.critGroupId));
+      for (const key of ["day", "startTime", "endTime", "room", "reason"] as const) {
+        if (input[key]) query.set(key, input[key]);
+      }
+      return redirect(`/?${query}#reschedule`, 303);
     }
     throw error;
   }
 
   bus.emit("changed");
-  return redirect("/", 303);
+  const query = new URLSearchParams({
+    week: String(input.week),
+    flash: "moved",
+    changed: String(input.critGroupId),
+  });
+  return redirect(`/?${query}#flash`, 303);
 };

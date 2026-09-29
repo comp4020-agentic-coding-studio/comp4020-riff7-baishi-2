@@ -4,7 +4,10 @@ import Database from "better-sqlite3";
 import { and, asc, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
-import { type CritGroup, type Exception, critGroups, exceptions, weeks } from "./schema";
+import { type CritGroup, type Exception, type Week, critGroups, exceptions, weeks } from "./schema";
+import { DAYS, pickCurrentWeek, sessionDate } from "./schedule";
+
+export { sessionDate };
 
 // One SQLite file is the app's whole persistent state. In production
 // fly.toml points DATABASE_PATH at the machine's volume (/data), which is
@@ -39,7 +42,7 @@ const SEED_GROUPS: Omit<CritGroup, "id">[] = [
   { agent: "liuru", name: "Liuru", tutorName: "Bill McAlister", day: "Wed", startTime: "15:30", endTime: "17:00", room: DEFAULT_ROOM },
 ];
 
-const SEED_WEEKS: Omit<import("./schema").Week, never>[] = [
+const SEED_WEEKS: Week[] = [
   { week: 1, monday: "2026-07-27" },
   { week: 2, monday: "2026-08-03" },
   { week: 3, monday: "2026-08-10" },
@@ -91,17 +94,6 @@ function seed(): void {
 
 seed();
 
-const DAY_OFFSET: Record<string, number> = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4 };
-
-// The real calendar date a (week, day) pair falls on, derived from the
-// week's Monday rather than stored — the same relationship the source
-// JSON's own comment describes ("the cutoff moves with the session").
-export function sessionDate(monday: string, day: string): string {
-  const date = new Date(`${monday}T00:00:00Z`);
-  date.setUTCDate(date.getUTCDate() + (DAY_OFFSET[day] ?? 0));
-  return date.toISOString().slice(0, 10);
-}
-
 export type RosterGroup = CritGroup & {
   sessions: Array<{
     week: number;
@@ -117,6 +109,10 @@ export type RosterGroup = CritGroup & {
 
 export function listWeeks() {
   return db.select().from(weeks).orderBy(asc(weeks.week)).all();
+}
+
+export function currentWeek(today = new Date().toISOString().slice(0, 10)): number {
+  return pickCurrentWeek(listWeeks(), today);
 }
 
 export function listRoster(): RosterGroup[] {
@@ -154,7 +150,7 @@ export function listRoster(): RosterGroup[] {
   }));
 }
 
-const DAY_NAMES = new Set(["Mon", "Tue", "Wed", "Thu", "Fri"]);
+const DAY_NAMES = new Set<string>(DAYS);
 const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
 export class ValidationError extends Error {}

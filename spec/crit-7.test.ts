@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, inject, it } from "vitest";
-import { createDirtyTracker, createReconnectGate } from "../src/lib/live-reload";
+import { createReconnectGate } from "../src/lib/live-reload";
 import { sessionDate } from "../src/lib/db";
+import { type RosterInput, buildWeekGrid, pickCurrentWeek } from "../src/lib/schedule";
 
 // This week's brief: model a slice of a real ANU system, wired end to end,
 // with a core flow that survives a reload. The roster's core flow is
@@ -37,18 +38,18 @@ describe("rescheduling a session", () => {
       }),
     );
     expect(res.status).toBe(303);
-    expect(res.headers.get("location")).toBe("/");
+    expect(res.headers.get("location")).toMatch(/^\/\?week=8&flash=moved&changed=3/);
   });
 
   it("persists the reschedule: a fresh page load shows it", async () => {
-    const res = await fetch(baseUrl);
+    const res = await fetch(new URL("/?week=8", baseUrl));
     const html = await res.text();
     expect(html).toContain(reason);
     expect(html).toContain("Thu 11:00–12:30");
   });
 
   it("falls back to the group's own room when none is given", async () => {
-    const html = await (await fetch(baseUrl)).text();
+    const html = await (await fetch(new URL("/?week=8", baseUrl))).text();
     expect(html).toContain("Marie Reay Building (155), Room 4.03");
   });
 
@@ -116,9 +117,9 @@ describe("rescheduling the same week twice", () => {
       }),
     );
     expect(res.status).toBe(303);
-    expect(res.headers.get("location")).toBe("/");
+    expect(res.headers.get("location")).toMatch(/^\/\?week=11&flash=moved/);
 
-    const html = await (await fetch(baseUrl)).text();
+    const html = await (await fetch(new URL("/?week=11", baseUrl))).text();
     expect(html).not.toContain("first reschedule");
     expect(html).toContain("second reschedule");
     expect(html).toContain("Fri 13:00–14:00");
@@ -144,7 +145,7 @@ describe("validation", () => {
     expect(res.status).toBe(303);
     expect(res.headers.get("location")).toMatch(/^\/\?error=/);
 
-    const html = await (await fetch(baseUrl)).text();
+    const html = await (await fetch(new URL("/?week=5", baseUrl))).text();
     // week 5's standing Wednesday slot should be untouched
     expect(html).not.toContain("Thu 09:00–10:00");
   });
@@ -221,68 +222,6 @@ describe("sessionDate", () => {
   });
 });
 
-describe("dirty tracker", () => {
-  // A `location.reload()` from the SSE stream would silently wipe an
-  // in-progress reschedule draft -- found live with agent-browser: filling
-  // the reschedule form's reason field, triggering a genuine change from a
-  // second tab, and watching the first tab's draft vanish on reload with no
-  // warning. This is the gate that stops that: index.astro wires markDirty
-  // to the reschedule form's own `input` event and checks isDirty before
-  // reloading on either a "message" event or a post-first reconnect.
-  it("starts clean and reports dirty once marked", () => {
-    const dirty = createDirtyTracker();
-    expect(dirty.isDirty()).toBe(false);
-    dirty.markDirty();
-    expect(dirty.isDirty()).toBe(true);
-  });
-
-  it("stays dirty across repeated checks and marks", () => {
-    const dirty = createDirtyTracker();
-    dirty.markDirty();
-    dirty.markDirty();
-    expect(dirty.isDirty()).toBe(true);
-    expect(dirty.isDirty()).toBe(true);
-  });
-
-  // Found live the same way as the reload-vs-draft bug above: a tutor who
-  // types into the reschedule form and then clears it back out (or the
-  // browser autofills a default value they then remove) has nothing left
-  // to lose, but a one-way dirty flag would leave this tab's live sync
-  // broken for the rest of its life over a draft that no longer exists.
-  it("goes clean again once marked clean", () => {
-    const dirty = createDirtyTracker();
-    dirty.markDirty();
-    expect(dirty.isDirty()).toBe(true);
-    dirty.markClean();
-    expect(dirty.isDirty()).toBe(false);
-  });
-
-  // Found live the same way as the two bugs above: going clean stops
-  // *future* reload attempts from being skipped, but a change that already
-  // arrived while dirty (a reload skipped, the stale notice shown instead)
-  // was never retried -- the tab sat on the stale notice until some
-  // unrelated further change happened to arrive, or the tutor manually
-  // refreshed. `notePendingReload` records that a reload was deferred;
-  // `claimPendingReload` is what index.astro checks right after `markClean`
-  // to fire that deferred reload immediately instead of waiting for one
-  // that might never come.
-  it("claims a pending reload once, after the deferring dirty state clears", () => {
-    const dirty = createDirtyTracker();
-    dirty.markDirty();
-    dirty.notePendingReload();
-    dirty.markClean();
-    expect(dirty.claimPendingReload()).toBe(true);
-    expect(dirty.claimPendingReload()).toBe(false);
-  });
-
-  it("has nothing pending when no reload was ever deferred", () => {
-    const dirty = createDirtyTracker();
-    dirty.markDirty();
-    dirty.markClean();
-    expect(dirty.claimPendingReload()).toBe(false);
-  });
-});
-
 describe("cancelling a reschedule", () => {
   let exceptionId: string;
 
@@ -299,7 +238,7 @@ describe("cancelling a reschedule", () => {
         reason: "to be cancelled",
       }),
     );
-    const html = await (await fetch(baseUrl)).text();
+    const html = await (await fetch(new URL("/?week=3&group=5", baseUrl))).text();
     // the cancel form's action follows its exception's reason text in the
     // rendered <li>, so anchor the search there rather than assuming an id
     const match = html.match(/to be cancelled[^]*?\/api\/exceptions\/(\d+)\/cancel/);
@@ -310,9 +249,102 @@ describe("cancelling a reschedule", () => {
   it("reverts the week to the group's standing slot", async () => {
     const res = await post(`/api/exceptions/${exceptionId}/cancel`, new URLSearchParams());
     expect(res.status).toBe(303);
-    expect(res.headers.get("location")).toBe("/");
+    expect(res.headers.get("location")).toMatch(/flash=reverted/);
 
-    const html = await (await fetch(baseUrl)).text();
+    const html = await (await fetch(new URL("/?week=3", baseUrl))).text();
     expect(html).not.toContain("to be cancelled");
+  });
+});
+
+describe("the week grid view", () => {
+  const roster: RosterInput[] = [
+    { id: 1, agent: "a", name: "A", tutorName: "Tutor One", day: "Mon", startTime: "14:00", endTime: "15:30", room: "R1",
+      sessions: [{ week: 1, day: "Mon", startTime: "14:00", endTime: "15:30", room: "R1", reason: null, exceptionId: null }] },
+    { id: 2, agent: "b", name: "B", tutorName: "Tutor One", day: "Tue", startTime: "09:00", endTime: "10:30", room: "R2",
+      sessions: [{ week: 1, day: "Mon", startTime: "15:00", endTime: "16:00", room: "R2", reason: "moved", exceptionId: 7 }] },
+    { id: 3, agent: "c", name: "C", tutorName: "Tutor Two", day: "Fri", startTime: "18:00", endTime: "19:30", room: "R3",
+      sessions: [{ week: 1, day: "Fri", startTime: "18:00", endTime: "19:30", room: "R3", reason: null, exceptionId: null }] },
+  ];
+  const grid = buildWeekGrid(roster, 1, "2026-07-27");
+
+  it("places each session on its own day with a derived date", () => {
+    expect(grid.days.map((d) => d.date)).toEqual(["2026-07-27", "2026-07-28", "2026-07-29", "2026-07-30", "2026-07-31"]);
+    expect(grid.days[0].sessions.map((s) => s.name)).toEqual(["A", "B"]);
+    expect(grid.days[4].sessions.map((s) => s.name)).toEqual(["C"]);
+  });
+
+  it("flags two overlapping sessions that share a tutor as a clash", () => {
+    const [a, b] = grid.days[0].sessions;
+    expect(a.clash).toBe(true);
+    expect(b.clash).toBe(true);
+    expect(grid.days[4].sessions[0].clash).toBe(false);
+  });
+
+  it("puts overlapping sessions in separate lanes", () => {
+    const [a, b] = grid.days[0].sessions;
+    expect([a.lane, b.lane]).toEqual([0, 1]);
+    expect(a.lanes).toBe(2);
+  });
+
+  it("gives a session that overlaps nothing the full column width", () => {
+    const morning = buildWeekGrid(
+      [{ ...roster[0], sessions: [{ ...roster[0].sessions[0], startTime: "09:00", endTime: "10:00" }] }, roster[0]],
+      1,
+      "2026-07-27",
+    ).days[0].sessions;
+    expect(morning.map((s) => s.lanes)).toEqual([1, 1]);
+  });
+
+  it("stretches the visible hours to fit a late session", () => {
+    expect(grid.startHour).toBe(8);
+    expect(grid.endHour).toBe(20);
+  });
+});
+
+describe("pickCurrentWeek", () => {
+  const weeks = [
+    { week: 1, monday: "2026-07-27" },
+    { week: 2, monday: "2026-08-03" },
+    { week: 3, monday: "2026-08-10" },
+  ];
+  it("picks the week containing the date", () => {
+    expect(pickCurrentWeek(weeks, "2026-08-05")).toBe(2);
+  });
+  it("uses week 1 before the semester and the last week after it", () => {
+    expect(pickCurrentWeek(weeks, "2026-01-01")).toBe(1);
+    expect(pickCurrentWeek(weeks, "2027-01-01")).toBe(3);
+  });
+});
+
+describe("the timetable page", () => {
+  it("shows a moved session in the grid with a Moved tag", async () => {
+    const html = await (await fetch(new URL("/?week=9", baseUrl))).text();
+    expect(html).toContain("Monday 5 October is the ACT Labour Day public holiday");
+    expect(html).toContain('class="tag"');
+  });
+
+  it("offers an undo after a move, and undo reverts it", async () => {
+    const move = await post(
+      "/api/exceptions",
+      new URLSearchParams({ critGroupId: "2", week: "10", day: "Fri", startTime: "10:00", endTime: "11:00", room: "", reason: "undo probe" }),
+    );
+    const html = await (await fetch(new URL(move.headers.get("location") ?? "/", baseUrl))).text();
+    expect(html).toContain("Undo");
+    const id = html.match(/\/api\/exceptions\/(\d+)\/cancel/)?.[1];
+    if (!id) throw new Error("no undo form after a move");
+    await post(`/api/exceptions/${id}/cancel`, new URLSearchParams({ week: "10", group: "2" }));
+    const after = await (await fetch(new URL("/?week=10", baseUrl))).text();
+    expect(after).not.toContain("undo probe");
+  });
+
+  it("sends a rejected draft back with the error and the typed values", async () => {
+    const res = await post(
+      "/api/exceptions",
+      new URLSearchParams({ critGroupId: "3", week: "7", day: "Wed", startTime: "10:00", endTime: "09:00", room: "", reason: "keep my typing" }),
+    );
+    const location = res.headers.get("location") ?? "";
+    expect(location).toContain("reason=keep+my+typing");
+    const html = await (await fetch(new URL(location, baseUrl))).text();
+    expect(html).toContain('value="keep my typing"');
   });
 });

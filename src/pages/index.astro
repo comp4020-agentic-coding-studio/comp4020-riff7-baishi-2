@@ -1,11 +1,52 @@
 ---
-import { listRoster, listWeeks } from "../lib/db";
+import { currentWeek, listRoster, listWeeks } from "../lib/db";
+import { DAYS, buildWeekGrid } from "../lib/schedule";
 import "../styles.css";
 
 const roster = listRoster();
 const weeks = listWeeks();
-const error = Astro.url.searchParams.get("error");
-const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri"];
+const q = Astro.url.searchParams;
+
+const intParam = (key: string): number | null => {
+  const v = q.get(key);
+  return v && /^\d+$/.test(v) ? Number(v) : null;
+};
+
+const requestedWeek = intParam("week");
+const weekNum = weeks.some((w) => w.week === requestedWeek) ? (requestedWeek as number) : currentWeek();
+const week = weeks.find((w) => w.week === weekNum)!;
+const nowWeek = currentWeek();
+const grid = buildWeekGrid(roster, weekNum, week.monday);
+
+const selectedId = intParam("group");
+const changedId = intParam("changed");
+const mineParam = q.get("mine");
+const mine = mineParam && roster.some((g) => g.agent === mineParam) ? mineParam : null;
+const flash = q.get("flash");
+const error = q.get("error");
+
+const link = (params: Record<string, string | number | null> = {}) => {
+  const sp = new URLSearchParams();
+  for (const [k, v] of Object.entries({ week: weekNum, mine, ...params })) {
+    if (v !== null) sp.set(k, String(v));
+  }
+  return `/?${sp}`;
+};
+
+const sessions = grid.days.flatMap((d) => d.sessions);
+const selected = sessions.find((s) => s.groupId === selectedId) ?? null;
+const changed = sessions.find((s) => s.groupId === changedId) ?? null;
+const movedSessions = sessions.filter((s) => s.exceptionId !== null);
+const weeksWithChanges = new Set(roster.flatMap((g) => g.sessions.filter((s) => s.exceptionId !== null).map((s) => s.week)));
+
+const fmtDate = (iso: string) =>
+  new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-AU", { day: "numeric", month: "short", timeZone: "UTC" });
+const dateOf = (day: string) => grid.days.find((d) => d.day === day)?.date ?? week.monday;
+
+const draft = (key: string, fallback = "") => q.get(key) ?? fallback;
+const REASONS = ["Public holiday", "Tutor unavailable", "Room unavailable", "Clash with another class", "Student request"];
+const prevWeek = weeks.find((w) => w.week === weekNum - 1);
+const nextWeek = weeks.find((w) => w.week === weekNum + 1);
 ---
 
 <!doctype html>
@@ -15,169 +56,252 @@ const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri"];
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
       name="description"
-      content="This course's crit-group roster: standing weekly slots and per-week reschedule exceptions, persisted in SQLite and live-synced across tabs."
+      content="This course's crit-group timetable: a week-by-week grid of every group's session. Click a session to reschedule it; changes are saved to SQLite and synced across tabs."
     />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <title>Crit roster</title>
+    <title>Crit timetable</title>
   </head>
   <body>
-    <nav aria-label="site">
-      <a href="/">Roster</a>
+    <nav aria-label="site" class="site-nav">
+      <strong class="brand">Crit timetable</strong>
+      <a href="/">Timetable</a>
       <a href="/readme/">About</a>
     </nav>
-    <main>
-      <h1>Crit roster</h1>
-      <p>
-        Every crit group's standing weekly slot, and the exceptions that
-        replace it for one teaching week at a time — rescheduling a session
-        here writes a row to SQLite instead of hand-editing the course
-        website's <code>api/crit-groups.json</code>. Open this page in two
-        tabs: rescheduling in one updates the other over the live stream.
+    <main class="wide">
+      <h1>Week {weekNum} <span class="h1-sub">{fmtDate(week.monday)} – {fmtDate(dateOf("Fri"))}</span></h1>
+
+      <p id="stale-notice" class="banner" role="status" hidden>
+        The timetable changed in another tab. <a href={link()}>Refresh to see it</a>
       </p>
 
-      {error && <p class="error" role="alert">{error}</p>}
-      <p id="stale-notice" class="notice" role="status" hidden>
-        The roster changed in another tab. Your draft below is untouched —
-        reload when you're ready to see the update.
-      </p>
+      <div class="toolbar">
+        <nav aria-label="teaching weeks" class="week-strip">
+          {prevWeek && <a class="step" href={link({ week: prevWeek.week })} rel="prev">← Week {prevWeek.week}</a>}
+          <ol>
+            {
+              weeks.map((w) => (
+                <li>
+                  <a
+                    href={link({ week: w.week })}
+                    aria-current={w.week === weekNum ? "page" : undefined}
+                    class:list={[{ now: w.week === nowWeek, edited: weeksWithChanges.has(w.week) }]}
+                  >
+                    <span class="sr">Week </span>{w.week}
+                    {w.week === nowWeek && <span class="sr"> (this week)</span>}
+                    {weeksWithChanges.has(w.week) && <span class="sr"> (has changes)</span>}
+                  </a>
+                </li>
+              ))
+            }
+          </ol>
+          {nextWeek && <a class="step" href={link({ week: nextWeek.week })} rel="next">Week {nextWeek.week} →</a>}
+        </nav>
+
+        <form method="get" action="/" class="filter">
+          <input type="hidden" name="week" value={weekNum} />
+          <label for="mine">Highlight my group</label>
+          <select id="mine" name="mine">
+            <option value="">Everyone</option>
+            {
+              roster.map((g) => (
+                <option value={g.agent} selected={g.agent === mine}>
+                  {g.name}
+                </option>
+              ))
+            }
+          </select>
+          <button type="submit" class="secondary">Apply</button>
+        </form>
+      </div>
 
       {
-        roster.map((group) => {
-          const exceptionSessions = group.sessions.filter((s) => s.exceptionId !== null);
-          return (
-            <section aria-labelledby={`group-${group.agent}`}>
-              <h2 id={`group-${group.agent}`}>{group.name}</h2>
+        flash && (
+          <div id="flash" class="flash" role="status">
+            {flash === "moved" && changed ? (
               <p>
-                Standing slot: every {group.day} {group.startTime}–{group.endTime} ·{" "}
-                {group.tutorName} · {group.room}
+                Moved <strong>{changed.name}</strong> to {changed.day} {fmtDate(dateOf(changed.day))}, {changed.startTime}–{changed.endTime}.
               </p>
-              {exceptionSessions.length === 0 ? (
-                <p>No exceptions this semester — meets at its standing slot every teaching week.</p>
+            ) : flash === "reverted" && changed ? (
+              <p>
+                <strong>{changed.name}</strong> is back at its standing slot in week {weekNum}.
+              </p>
+            ) : (
+              <p>Timetable updated.</p>
+            )}
+            {flash === "moved" && changed?.exceptionId && (
+              <form method="post" action={`/api/exceptions/${changed.exceptionId}/cancel`}>
+                <input type="hidden" name="week" value={weekNum} />
+                <input type="hidden" name="group" value={changed.groupId} />
+                <button type="submit" class="secondary">Undo</button>
+              </form>
+            )}
+          </div>
+        )
+      }
+
+      <div class="layout">
+        <div class="grid-wrap">
+          <div class="week-grid" style={`--hours:${grid.hours.length}`}>
+            <div class="gutter" aria-hidden="true">
+              <div class="day-head"></div>
+              <div class="hour-labels">
+                {grid.hours.map((h) => <span>{String(h).padStart(2, "0")}:00</span>)}
+              </div>
+            </div>
+            {
+              grid.days.map((d) => (
+                <section class="day" aria-labelledby={`day-${d.day}`}>
+                  <h2 class="day-head" id={`day-${d.day}`}>
+                    {d.day} <span>{fmtDate(d.date)}</span>
+                  </h2>
+                  <ul class:list={["track", { "is-empty": d.sessions.length === 0 }]}>
+                    {d.sessions.map((s) => (
+                      <li
+                        class:list={[
+                          "block",
+                          `tutor-${s.tutorIndex % 3}`,
+                          {
+                            moved: s.exceptionId !== null,
+                            clash: s.clash,
+                            dim: mine !== null && s.agent !== mine,
+                            selected: s.groupId === selectedId,
+                            "just-changed": flash !== null && s.groupId === changedId,
+                          },
+                        ]}
+                        style={`--top:${s.top}%;--height:${s.height}%;--lane:${s.lane};--lanes:${s.lanes}`}
+                      >
+                        <a href={`${link({ group: s.groupId })}#reschedule`} aria-current={s.groupId === selectedId ? "true" : undefined}>
+                          <span class="sr">Reschedule </span>
+                          <strong>{s.name}</strong>
+                          <span class="time">{s.startTime}–{s.endTime}</span>
+                          <span class="who">{s.tutorName}</span>
+                          {s.exceptionId !== null && <span class="tag">Moved</span>}
+                          {s.clash && <span class="tag tag-clash">Clash</span>}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              ))
+            }
+          </div>
+
+          <section class="changes" aria-labelledby="changes-title">
+            <h2 id="changes-title">Changes in week {weekNum}</h2>
+            {
+              movedSessions.length === 0 ? (
+                <p class="muted">Every group meets at its standing slot this week.</p>
               ) : (
                 <ul>
-                  {exceptionSessions.map((session) => (
+                  {movedSessions.map((s) => (
                     <li>
-                      Week {session.week} ({session.date}): now {session.day}{" "}
-                      {session.startTime}–{session.endTime} in {session.room} —{" "}
-                      {session.reason}
-                      <form method="post" action={`/api/exceptions/${session.exceptionId}/cancel`}>
-                        <button type="submit">Cancel, back to standing slot</button>
-                      </form>
+                      <strong>{s.name}</strong>: {s.day} {s.startTime}–{s.endTime} · {s.room} — {s.reason}
+                      <span class="muted"> (standing: {s.standing.day} {s.standing.startTime}–{s.standing.endTime})</span>
                     </li>
                   ))}
                 </ul>
-              )}
-            </section>
-          );
-        })
-      }
+              )
+            }
+          </section>
+        </div>
 
-      <form method="post" action="/api/exceptions">
-        <fieldset>
-          <legend>Reschedule a session</legend>
+        <aside id="reschedule" class="panel" aria-labelledby="panel-title">
+          <h2 id="panel-title">{selected ? `Reschedule ${selected.name}` : "Reschedule a session"}</h2>
+          {
+            selected ? (
+              <p class="muted">
+                Week {weekNum}: currently {selected.day} {selected.startTime}–{selected.endTime}, {selected.room}.
+                {selected.exceptionId !== null && <> Moved from its standing slot — {selected.reason}.</>}
+              </p>
+            ) : (
+              <p class="muted">Pick a session on the grid, or choose a group below.</p>
+            )
+          }
 
-          <label for="critGroupId">Crit group</label>
-          <select id="critGroupId" name="critGroupId" required>
-            {roster.map((group) => (
-              <option value={group.id}>
-                {group.name} ({group.day} {group.startTime}–{group.endTime})
-              </option>
-            ))}
-          </select>
+          {error && <p class="error" role="alert">{error}</p>}
 
-          <label for="week">Teaching week</label>
-          <select id="week" name="week" required>
-            {weeks.map((w) => (
-              <option value={w.week}>
-                Week {w.week} ({w.monday})
-              </option>
-            ))}
-          </select>
+          <form method="post" action="/api/exceptions" class="stack">
+            <label for="critGroupId">Crit group</label>
+            <select id="critGroupId" name="critGroupId" required>
+              {
+                roster.map((g) => (
+                  <option value={g.id} selected={g.id === selectedId}>
+                    {g.name} ({g.day} {g.startTime}–{g.endTime})
+                  </option>
+                ))
+              }
+            </select>
 
-          <label for="day">New day</label>
-          <select id="day" name="day" required>
-            {DAYS.map((day) => (
-              <option value={day}>{day}</option>
-            ))}
-          </select>
+            <label for="week">Teaching week</label>
+            <select id="week" name="week" required>
+              {
+                weeks.map((w) => (
+                  <option value={w.week} selected={w.week === weekNum}>
+                    Week {w.week} ({w.monday})
+                  </option>
+                ))
+              }
+            </select>
 
-          <label for="startTime">New start</label>
-          <input id="startTime" name="startTime" type="time" required />
+            <div class="row">
+              <div>
+                <label for="day">New day</label>
+                <select id="day" name="day" required>
+                  {
+                    DAYS.map((day) => (
+                      <option value={day} selected={day === draft("day", selected?.day ?? "Mon")}>
+                        {day}
+                      </option>
+                    ))
+                  }
+                </select>
+              </div>
+              <div>
+                <label for="startTime">Start</label>
+                <input id="startTime" name="startTime" type="time" required value={draft("startTime", selected?.startTime ?? "")} />
+              </div>
+              <div>
+                <label for="endTime">End</label>
+                <input id="endTime" name="endTime" type="time" required value={draft("endTime", selected?.endTime ?? "")} />
+              </div>
+            </div>
 
-          <label for="endTime">New end</label>
-          <input id="endTime" name="endTime" type="time" required />
+            <label for="room">Room</label>
+            <input id="room" name="room" type="text" placeholder="defaults to the group's usual room" value={draft("room")} />
 
-          <label for="room">Room</label>
-          <input id="room" name="room" type="text" placeholder="defaults to the group's usual room" />
+            <label for="reason">Reason</label>
+            <input id="reason" name="reason" type="text" list="reasons" required value={draft("reason")} />
+            <datalist id="reasons">
+              {REASONS.map((r) => <option value={r} />)}
+            </datalist>
 
-          <label for="reason">Reason</label>
-          <input id="reason" name="reason" type="text" required />
+            <button type="submit">Reschedule</button>
+          </form>
 
-          <button type="submit">Reschedule</button>
-        </fieldset>
-      </form>
+          {
+            selected?.exceptionId != null && (
+              <form method="post" action={`/api/exceptions/${selected.exceptionId}/cancel`} class="undo">
+                <input type="hidden" name="week" value={weekNum} />
+                <input type="hidden" name="group" value={selected.groupId} />
+                <button type="submit" class="secondary">Undo — back to standing slot</button>
+              </form>
+            )
+          }
+        </aside>
+      </div>
     </main>
     <script>
-      import { createDirtyTracker, createReconnectGate } from "../lib/live-reload";
+      import { createReconnectGate } from "../lib/live-reload";
 
-      // The live half of the roster: reload on any change reported over the
-      // SSE stream, so a tutor watching this page sees a reschedule made in
-      // another tab without acting themselves. The form itself needs none of
-      // this — its POST + redirect re-renders the submitting tab from
-      // SQLite; this stream is how every other tab finds out.
-      //
-      // But a bare reload is only safe when there's nothing to lose: if this
-      // tutor is mid-way through filling in their own reschedule, the same
-      // reload that shows someone else's change would silently wipe their
-      // draft too. Track that with the reschedule form's own `input` event
-      // and skip the reload — showing a notice instead — whenever it fires.
-      //
-      // Dirty isn't one-way, though: typing a draft and then clearing it
-      // back out leaves nothing to lose either, so every input event
-      // re-compares the form's current values against its snapshot at page
-      // load and marks clean again when they match — otherwise a tutor who
-      // touched the form and backed out would have this tab's live sync
-      // stay broken for the rest of its life over a draft that no longer
-      // exists. Going clean also has to resolve any reload that was already
-      // deferred while dirty — otherwise the stale notice just sits there
-      // until some unrelated further change happens to arrive.
-      const dirty = createDirtyTracker();
-      const rescheduleForm = document.querySelector<HTMLFormElement>('form[action="/api/exceptions"]');
-      const serialize = (form: HTMLFormElement) => new URLSearchParams(new FormData(form) as unknown as string[][]).toString();
-      const pristineSnapshot = rescheduleForm ? serialize(rescheduleForm) : null;
-      rescheduleForm?.addEventListener("input", () => {
-        if (serialize(rescheduleForm) === pristineSnapshot) {
-          dirty.markClean();
-          if (dirty.claimPendingReload()) location.reload();
-        } else {
-          dirty.markDirty();
-        }
-      });
-
-      const staleNotice = document.getElementById("stale-notice");
-      const reloadUnlessDirty = () => {
-        if (dirty.isDirty()) {
-          dirty.notePendingReload();
-          staleNotice?.removeAttribute("hidden");
-        } else {
-          location.reload();
-        }
-      };
-
+      // Other tabs learn about a change over the SSE stream. Reloading would
+      // wipe a half-typed reschedule, so just say so and let the user choose.
+      const banner = document.getElementById("stale-notice");
+      const showBanner = () => banner?.removeAttribute("hidden");
       const source = new EventSource("/api/events");
-      source.addEventListener("message", reloadUnlessDirty);
-
-      // A dropped connection (a network blip, or on Fly.io the machine
-      // auto-stopping while idle) reconnects on its own — that's the
-      // browser's EventSource doing what the spec says. But any "changed"
-      // ping broadcast while disconnected is gone: the in-memory bus keeps
-      // no backlog. Reload on every reconnect too (see live-reload.ts), so
-      // a tab that missed a change while disconnected still catches up
-      // instead of sitting stale until the next one — subject to the same
-      // dirty check, for the same reason.
-      const shouldReloadOnOpen = createReconnectGate();
+      source.addEventListener("message", showBanner);
+      const shouldNotifyOnOpen = createReconnectGate();
       source.addEventListener("open", () => {
-        if (shouldReloadOnOpen()) reloadUnlessDirty();
+        if (shouldNotifyOnOpen()) showBanner();
       });
     </script>
   </body>
