@@ -2,13 +2,36 @@
 // README.md, rendered: what this app is and what good looks like here,
 // published with the app. spec/readme.test.ts checks the whole of it is here.
 import * as readme from "../../README.md";
+import SiteNav from "../components/SiteNav.astro";
+import { listRoster, listWeeks } from "../lib/db";
 import "../styles.css";
+import "../about.css";
+import "../about-story.css";
 
 const title = readme.getHeadings().find((h) => h.depth === 1)?.text ?? "README";
 
 // README images are committed to public/ and linked relatively (public/x.png)
 // so they render on GitHub; here they're served from the site root.
 const html = (await readme.compiledContent()).replace(/(src|href)="public\//g, '$1="/');
+
+// Split at each h2 so every section can be its own card; the text and its order are untouched.
+const [introHtml, ...rawSections] = html.split(/(?=<h2)/);
+// A bold lead-in followed by ":" keeps the colon in the title; one followed by "," stays run-in
+// with its sentence. Only where the punctuation sits is changed, never the words.
+const sectionHtml = rawSections.map((section) =>
+  section
+    .replace(/<li>(\s*)<strong>([^<]*)<\/strong>:/g, "<li>$1<strong>$2:</strong>")
+    .replace(/<li>(\s*)<strong>([^<]*)<\/strong>,/g, '<li>$1<strong class="run-in">$2</strong>,'),
+);
+
+const roster = listRoster();
+const stats = [
+  { value: roster.length, label: "crit groups" },
+  { value: listWeeks().length, label: "teaching weeks" },
+  { value: new Set(roster.map((g) => g.tutorName)).size, label: "tutors" },
+  { value: roster.flatMap((g) => g.sessions).filter((s) => s.exceptionId !== null).length, label: "sessions moved" },
+];
+const PANES = ["Mon", "Tue", "Wed", "Thu", "Fri"];
 ---
 
 <!doctype html>
@@ -16,15 +39,63 @@ const html = (await readme.compiledContent()).replace(/(src|href)="public\//g, '
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content="What this crit roster app is and how it was built." />
+    <meta name="description" content="What this crit timetable app is and how it was built." />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <title>{title}</title>
   </head>
-  <body>
-    <nav aria-label="site">
-      <a href="/">Roster</a>
-      <a href="/readme/">About</a>
-    </nav>
-    <main set:html={html} />
+  <body class="about-page">
+    <div class="read-progress" aria-hidden="true"></div>
+    <SiteNav current="about" />
+
+    <header class="hero">
+      <div class="hero-copy">
+        <p class="kicker">About this project</p>
+        <p class="hero-title">Move one week.<br />Everyone sees it.</p>
+        <p class="hero-lede">
+          A live timetable for the course's crit groups: one click reschedules a session, one row in SQLite records it, and every open tab
+          hears about it.
+        </p>
+        <div class="hero-actions">
+          <a class="btn primary" href="/">← Back to timetable</a>
+          <a class="btn ghost" href="#story">Read the story ↓</a>
+        </div>
+      </div>
+
+      <div class="scene" aria-hidden="true">
+        <div class="stage">
+          {
+            PANES.map((day, i) => (
+              <div class="pane" style={`--i:${i}`}>
+                <span class="pane-day">{day}</span>
+                {i === 2 && <span class="pane-block b1"></span>}
+                {i === 2 && <span class="pane-block b2"></span>}
+                {i === 0 && <span class="pane-block ghost-slot"></span>}
+                {i === 4 && <span class="pane-block b3"></span>}
+              </div>
+            ))
+          }
+          <div class="mover"><strong>Shitao</strong><span>14:00</span><em>Moved</em></div>
+        </div>
+      </div>
+    </header>
+
+    <section class="stats" aria-label="At a glance">
+      <ul>
+        {
+          stats.map((s) => (
+            <li>
+              <strong>{s.value}</strong>
+              <span>{s.label}</span>
+            </li>
+          ))
+        }
+      </ul>
+    </section>
+
+    <main class="about" id="story">
+      <div class="intro prose" set:html={introHtml} />
+      {sectionHtml.map((section) => <section class="prose card story-section" set:html={section} />)}
+      <p class="back-row"><a class="btn primary" href="/">← Back to timetable</a></p>
+    </main>
   </body>
 </html>

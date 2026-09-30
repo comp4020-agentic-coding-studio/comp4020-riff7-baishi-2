@@ -1,7 +1,9 @@
 ---
 import { currentWeek, listRoster, listWeeks } from "../lib/db";
 import { DAYS, buildWeekGrid } from "../lib/schedule";
+import SiteNav from "../components/SiteNav.astro";
 import "../styles.css";
+import "../timetable-motion.css";
 
 const roster = listRoster();
 const weeks = listWeeks();
@@ -62,11 +64,7 @@ const nextWeek = weeks.find((w) => w.week === weekNum + 1);
     <title>Crit timetable</title>
   </head>
   <body>
-    <nav aria-label="site" class="site-nav">
-      <strong class="brand">Crit timetable</strong>
-      <a href="/">Timetable</a>
-      <a href="/readme/">About</a>
-    </nav>
+    <SiteNav current="timetable" />
     <main class="wide">
       <h1>Week {weekNum} <span class="h1-sub">{fmtDate(week.monday)} – {fmtDate(dateOf("Fri"))}</span></h1>
 
@@ -112,7 +110,10 @@ const nextWeek = weeks.find((w) => w.week === weekNum + 1);
           </select>
           <button type="submit" class="secondary">Apply</button>
         </form>
+
       </div>
+
+      <p id="drag-hint" class="drag-hint" hidden>Tip: drag a session to a new day or time — you'll be asked for a reason before anything is saved.</p>
 
       {
         flash && (
@@ -141,7 +142,13 @@ const nextWeek = weeks.find((w) => w.week === weekNum + 1);
 
       <div class="layout">
         <div class="grid-wrap">
-          <div class="week-grid" style={`--hours:${grid.hours.length}`}>
+          <div
+            class="week-grid"
+            style={`--hours:${grid.hours.length}`}
+            data-week={weekNum}
+            data-start-hour={grid.startHour}
+            data-end-hour={grid.endHour}
+          >
             <div class="gutter" aria-hidden="true">
               <div class="day-head"></div>
               <div class="hour-labels">
@@ -168,9 +175,16 @@ const nextWeek = weeks.find((w) => w.week === weekNum + 1);
                             "just-changed": flash !== null && s.groupId === changedId,
                           },
                         ]}
-                        style={`--top:${s.top}%;--height:${s.height}%;--lane:${s.lane};--lanes:${s.lanes}`}
+                        style={`--top:${s.top}%;--height:${s.height}%;--lane:${s.lane};--lanes:${s.lanes};--n:${sessions.indexOf(s)}`}
+                        data-group={s.groupId}
+                        data-name={s.name}
+                        data-day={s.day}
+                        data-start={s.startTime}
+                        data-end={s.endTime}
+                        data-tutor={s.tutorName}
+                        data-room={s.room}
                       >
-                        <a href={`${link({ group: s.groupId })}#reschedule`} aria-current={s.groupId === selectedId ? "true" : undefined}>
+                        <a href={`${link({ group: s.groupId })}#reschedule`} draggable="false" aria-current={s.groupId === selectedId ? "true" : undefined}>
                           <span class="sr">Reschedule </span>
                           <strong>{s.name}</strong>
                           <span class="time">{s.startTime}–{s.endTime}</span>
@@ -290,8 +304,37 @@ const nextWeek = weeks.find((w) => w.week === weekNum + 1);
         </aside>
       </div>
     </main>
+
+    <dialog id="move-dialog" aria-labelledby="move-title">
+      <form method="post" action="/api/exceptions" class="stack">
+        <h2 id="move-title">Move session</h2>
+        <p id="move-summary"></p>
+        <p id="move-clash" class="error" role="alert" hidden>This overlaps another session with the same tutor or room.</p>
+        <input type="hidden" name="critGroupId" />
+        <input type="hidden" name="week" />
+        <input type="hidden" name="day" />
+        <input type="hidden" name="startTime" />
+        <input type="hidden" name="endTime" />
+        <input type="hidden" name="room" />
+        <div>
+          <label for="move-reason">Reason</label>
+          <input id="move-reason" name="reason" type="text" list="reasons" required />
+        </div>
+        <div class="dialog-actions">
+          <button type="button" class="secondary" id="move-cancel">Cancel</button>
+          <button type="submit">Move session</button>
+        </div>
+      </form>
+    </dialog>
+
     <script>
       import { createReconnectGate } from "../lib/live-reload";
+      import { enableDragReschedule } from "../lib/drag-reschedule";
+
+      // Progressive enhancement: dragging only pre-fills the same plain
+      // <form method="post"> the side panel uses, so the server still does
+      // all the validation and the click-to-edit panel works without JS.
+      enableDragReschedule();
 
       // Other tabs learn about a change over the SSE stream. Reloading would
       // wipe a half-typed reschedule, so just say so and let the user choose.

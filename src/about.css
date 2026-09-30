@@ -1,0 +1,430 @@
+/* About page: hero with a 3D scene, stats, and the README as a card. */
+
+.btn {
+  display: inline-block;
+  padding: 0.7rem 1.3rem;
+  font-weight: 600;
+  text-decoration: none;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.btn:hover {
+  transform: translateY(-2px);
+}
+
+.btn.primary {
+  color: #10112a;
+  background: #ffffff;
+  box-shadow: 0 6px 24px rgba(120, 130, 255, 0.45);
+}
+
+.btn.ghost {
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.45);
+}
+
+.btn.ghost:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 2rem;
+  padding: clamp(2.5rem, 7vw, 5rem) clamp(1rem, 6vw, 5rem);
+  overflow: hidden;
+  color: #f4f4ff;
+  background:
+    radial-gradient(60rem 30rem at 85% 10%, rgba(120, 100, 255, 0.55), transparent 60%),
+    radial-gradient(40rem 25rem at 0% 100%, rgba(30, 190, 220, 0.35), transparent 60%),
+    linear-gradient(160deg, #0d0f2b, #1a1250 55%, #0d0f2b);
+  background-size: 140% 140%, 140% 140%, 100% 100%;
+  animation: aurora 18s ease-in-out infinite alternate;
+}
+
+@keyframes aurora {
+  from {
+    background-position: 0% 0%, 100% 100%, 0 0;
+  }
+  to {
+    background-position: 30% 20%, 70% 80%, 0 0;
+  }
+}
+
+.hero-copy > * {
+  animation: rise-in 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+.hero-copy > :nth-child(2) {
+  animation-delay: 0.1s;
+}
+
+.hero-copy > :nth-child(3) {
+  animation-delay: 0.2s;
+}
+
+.hero-copy > :nth-child(4) {
+  animation-delay: 0.3s;
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(1.5rem);
+  }
+}
+
+.kicker {
+  margin: 0 0 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #9fb0ff;
+}
+
+.hero-title {
+  margin: 0 0 1rem;
+  font-size: clamp(2.4rem, 6vw, 4.2rem);
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  background: linear-gradient(100deg, #ffffff 20%, #b8c4ff 60%, #7fe3f5);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.hero-lede {
+  max-width: 34rem;
+  margin: 0 0 1.75rem;
+  font-size: 1.1rem;
+  color: #d3d6f5;
+}
+
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+/* 3D scene: five day panes tilted in space, one session sliding Mon -> Tue */
+
+.scene {
+  display: grid;
+  place-items: center;
+  min-height: 24rem;
+  perspective: 1400px;
+}
+
+.stage {
+  --pane-w: 5.4rem;
+  --gap: 0.5rem;
+  position: relative;
+  display: flex;
+  gap: var(--gap);
+  transform-style: preserve-3d;
+  transform: rotateX(56deg) rotateZ(-28deg);
+  animation: sway 14s ease-in-out infinite alternate;
+}
+
+@keyframes sway {
+  from {
+    transform: rotateX(56deg) rotateZ(-34deg);
+  }
+  to {
+    transform: rotateX(48deg) rotateZ(-18deg);
+  }
+}
+
+.pane {
+  position: relative;
+  width: var(--pane-w);
+  height: 17rem;
+  padding: 0.5rem;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.05));
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 0.6rem;
+  box-shadow: 0 30px 40px rgba(0, 0, 0, 0.35);
+  transform-style: preserve-3d;
+  animation: float 5s ease-in-out infinite;
+  animation-delay: calc(var(--i) * -0.9s);
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateZ(0);
+  }
+  50% {
+    transform: translateZ(1.6rem);
+  }
+}
+
+.pane-day {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #cfd6ff;
+}
+
+.pane-block {
+  position: absolute;
+  left: 0.4rem;
+  right: 0.4rem;
+  border-radius: 0.35rem;
+  border-left: 4px solid #7fe3f5;
+  background: rgba(127, 227, 245, 0.35);
+  transform: translateZ(0.6rem);
+}
+
+.pane-block.b1 {
+  top: 3.2rem;
+  height: 3rem;
+  border-color: #ffb08a;
+  background: rgba(255, 176, 138, 0.4);
+}
+
+.pane-block.b2 {
+  top: 6.4rem;
+  height: 3rem;
+  border-color: #ffb08a;
+  background: rgba(255, 176, 138, 0.4);
+}
+
+.pane-block.b3 {
+  top: 9.5rem;
+  height: 3rem;
+  border-color: #c7e26b;
+  background: rgba(199, 226, 107, 0.4);
+}
+
+.pane-block.ghost-slot {
+  top: 9.6rem;
+  height: 3rem;
+  background: transparent;
+  border: 2px dashed rgba(255, 255, 255, 0.4);
+}
+
+.mover {
+  position: absolute;
+  top: 10.1rem;
+  left: 0.9rem;
+  width: calc(var(--pane-w) - 0.8rem);
+  height: 3rem;
+  display: flex;
+  flex-direction: column;
+  padding: 0.25rem 0.4rem;
+  font-size: 0.7rem;
+  line-height: 1.2;
+  color: #10112a;
+  background: #ffffff;
+  border-left: 4px solid #7fe3f5;
+  border-radius: 0.35rem;
+  box-shadow: 0 1.4rem 1.6rem rgba(0, 0, 0, 0.45);
+  transform: translateZ(3rem);
+  animation: hop 7s cubic-bezier(0.6, 0, 0.3, 1) infinite;
+}
+
+.mover em {
+  align-self: flex-start;
+  margin-top: 0.1rem;
+  padding: 0 0.3rem;
+  font-size: 0.6rem;
+  font-style: normal;
+  font-weight: 700;
+  color: #ffffff;
+  background: #a4123f;
+  border-radius: 0.2rem;
+  animation: tag 7s ease infinite;
+}
+
+@keyframes hop {
+  0%,
+  25% {
+    transform: translate3d(0, 0, 3rem);
+  }
+  45%,
+  75% {
+    transform: translate3d(calc(var(--pane-w) + var(--gap)), 0, 3rem);
+  }
+  95%,
+  100% {
+    transform: translate3d(0, 0, 3rem);
+  }
+}
+
+@keyframes tag {
+  0%,
+  30% {
+    opacity: 0;
+  }
+  50%,
+  75% {
+    opacity: 1;
+  }
+  90%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* stats */
+
+.stats {
+  position: relative;
+  z-index: 1;
+  margin-top: -2rem;
+  padding: 0 clamp(1rem, 6vw, 5rem);
+}
+
+.stats ul {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 1rem;
+  max-width: 60rem;
+  margin: 0 auto;
+  padding: 0;
+  list-style: none;
+  perspective: 800px;
+}
+
+.stats li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1.1rem 0.5rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 0.9rem;
+  box-shadow: 0 12px 30px rgba(20, 20, 80, 0.18);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.stats li:hover {
+  transform: rotateX(8deg) rotateY(-6deg) translateY(-4px);
+  box-shadow: 0 22px 40px rgba(20, 20, 80, 0.28);
+}
+
+.stats strong {
+  font-size: 2.2rem;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+}
+
+.stats span {
+  margin-top: 0.3rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+/* story */
+
+main.about {
+  max-width: 50rem;
+  padding-top: 3rem;
+  scroll-margin-top: 4rem;
+}
+
+.card {
+  padding: clamp(1.25rem, 4vw, 2.5rem);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 1.1rem;
+  box-shadow: 0 10px 40px rgba(20, 20, 80, 0.1);
+}
+
+.prose h1 {
+  font-size: 2rem;
+  letter-spacing: -0.01em;
+}
+
+.prose h2 {
+  margin-top: 2rem;
+  padding-top: 1rem;
+  font-size: 1.3rem;
+  border-top: 1px solid var(--line);
+}
+
+.prose p,
+.prose li {
+  line-height: 1.7;
+}
+
+.prose li {
+  margin-bottom: 0.6rem;
+}
+
+.prose code {
+  padding: 0.1rem 0.35rem;
+  font-size: 0.9em;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-radius: 0.3rem;
+}
+
+.prose pre {
+  padding: 1rem;
+  overflow-x: auto;
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  border-radius: 0.6rem;
+}
+
+.prose img {
+  max-width: 100%;
+  border-radius: 0.6rem;
+}
+
+.back-row {
+  margin: 2rem 0 0;
+  text-align: center;
+}
+
+.back-row .btn.primary {
+  color: var(--accent-ink);
+  background: var(--accent);
+  box-shadow: 0 6px 24px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+@media (max-width: 62rem) {
+  .hero {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .scene {
+    min-height: 19rem;
+    transform: scale(0.85);
+  }
+}
+
+@media (max-width: 30rem) {
+  .scene {
+    transform: scale(0.62);
+    margin: -3rem 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero,
+  .hero-copy > *,
+  .stage,
+  .pane,
+  .mover,
+  .mover em {
+    animation: none !important;
+  }
+
+  .mover {
+    transform: translate3d(calc(var(--pane-w) + var(--gap)), 0, 3rem);
+  }
+
+  .btn,
+  .stats li {
+    transition: none;
+  }
+}

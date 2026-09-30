@@ -1,0 +1,225 @@
+/* About page body: an open intro, then one card per section, decisions as numbered cards. */
+
+.read-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 30;
+  width: 100%;
+  height: 3px;
+  background: linear-gradient(90deg, #7fe3f5, var(--accent), #c58bff);
+  transform: scaleX(0);
+  transform-origin: 0 50%;
+}
+
+@supports (animation-timeline: scroll()) {
+  .read-progress {
+    animation: read-grow linear both;
+    animation-timeline: scroll(root);
+  }
+
+  @keyframes read-grow {
+    to {
+      transform: scaleX(1);
+    }
+  }
+}
+
+main.about {
+  max-width: 52rem;
+  display: grid;
+  gap: 1.5rem;
+}
+
+/* intro: no card, big type */
+
+.intro {
+  padding: 0.5rem 0 1rem;
+}
+
+.intro h1 {
+  position: relative;
+  display: inline-block;
+  margin: 0 0 1.25rem;
+  font-size: clamp(2rem, 5vw, 2.8rem);
+  letter-spacing: -0.02em;
+}
+
+.intro h1::after {
+  content: "";
+  display: block;
+  width: 100%;
+  height: 0.4rem;
+  margin-top: 0.3rem;
+  background: linear-gradient(90deg, var(--accent), #7fe3f5);
+  border-radius: 999px;
+  transform-origin: 0 50%;
+  animation: underline-in 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) 0.2s both;
+}
+
+@keyframes underline-in {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+.intro > p:first-of-type {
+  font-size: 1.2rem;
+  line-height: 1.75;
+}
+
+.intro > p:first-of-type::first-letter {
+  float: left;
+  margin: 0.1rem 0.6rem 0 0;
+  font-size: 3.6rem;
+  font-weight: 800;
+  line-height: 0.85;
+  color: var(--accent);
+}
+
+.intro > p:nth-of-type(2) {
+  padding-left: 1rem;
+  color: var(--muted);
+  border-left: 4px solid color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+/* section cards */
+
+.story-section {
+  counter-reset: decision;
+  position: relative;
+  overflow: hidden;
+}
+
+.story-section::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 5px;
+  background: linear-gradient(90deg, var(--accent), #7fe3f5, #c58bff);
+}
+
+.story-section h2 {
+  margin-top: 0.5rem;
+  padding-top: 0;
+  font-size: 1.6rem;
+  letter-spacing: -0.01em;
+  border-top: 0;
+}
+
+/* decisions: numbered cards */
+
+.story-section ul {
+  display: grid;
+  gap: 0.9rem;
+  margin: 1.25rem 0;
+  padding: 0;
+  list-style: none;
+  perspective: 900px;
+}
+
+.story-section li {
+  position: relative;
+  margin: 0;
+  padding: 1rem 1.1rem 1rem 3.4rem;
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface));
+  border: 1px solid var(--line);
+  border-radius: 0.9rem;
+  counter-increment: decision;
+  transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+}
+
+.story-section li::before {
+  content: counter(decision);
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  display: grid;
+  place-items: center;
+  width: 1.7rem;
+  height: 1.7rem;
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: var(--accent-ink);
+  background: var(--accent);
+  border-radius: 50%;
+}
+
+.story-section li:hover {
+  transform: rotateX(3deg) rotateY(-2deg) translateY(-3px);
+  border-color: var(--accent);
+  box-shadow: 0 14px 30px rgba(20, 20, 80, 0.16);
+}
+
+.story-section li > strong:first-child {
+  display: block;
+  margin-bottom: 0.2rem;
+  font-size: 1.05rem;
+  color: var(--ink);
+}
+
+.story-section li > strong.run-in {
+  display: inline;
+  margin: 0;
+  font-size: inherit;
+}
+
+/* closing paragraph after the list: a callout */
+
+.story-section ul + p {
+  padding: 1rem 1.2rem;
+  background: color-mix(in srgb, #c58bff 12%, var(--surface));
+  border-left: 5px solid #a86bf0;
+  border-radius: 0.6rem;
+}
+
+.prose a {
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+
+/* scroll reveal, where supported */
+
+@supports (animation-timeline: view()) {
+  .story-section,
+  .story-section li {
+    animation: story-in linear both;
+    animation-timeline: view();
+    animation-range: entry 0% entry 40%;
+  }
+
+  @keyframes story-in {
+    from {
+      opacity: 0;
+      transform: translateY(1.75rem);
+    }
+  }
+}
+
+@media (max-width: 30rem) {
+  .story-section li {
+    padding-left: 1.1rem;
+    padding-top: 3rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .read-progress,
+  .intro h1::after,
+  .story-section,
+  .story-section li {
+    animation: none !important;
+  }
+
+  .read-progress {
+    display: none;
+  }
+
+  .story-section li {
+    transition: none;
+  }
+
+  .story-section li:hover {
+    transform: none;
+  }
+}

@@ -61,11 +61,12 @@ what the agent needs to carry from any of it is your call.
   start, reason required, one exception per group per week) live in
   `src/lib/db.ts` so `spec/crit-7.test.ts` can assert them against behaviour,
   not markup.
-- **No client JavaScript on the write path.** Reschedule and cancel are plain
-  `<form method="post">`s with a 303 redirect. The only script on the page is
-  the `EventSource` listener that reloads *other* tabs on change — if a
-  future change needs more client JS than that, reconsider whether it
-  belongs in this app at all before adding it.
+- **The write path works without client JavaScript; JS only enhances it.**
+  Reschedule and cancel are plain `<form method="post">`s with a 303
+  redirect. Drag-to-reschedule (`src/lib/drag-reschedule.ts`) is
+  progressive enhancement: it only pre-fills the confirm dialog's ordinary
+  form, so the server still validates everything and the click-to-edit panel
+  works with JS off. Any further client JS needs the same property.
 - **The event bus is single-process and that's a stated limitation, not a
   bug to hide.** `src/lib/events.ts` only works because this app runs one
   Fly.io machine. If a future run adds a second machine, the live-sync

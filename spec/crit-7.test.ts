@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, inject, it } from "vitest";
 import { createReconnectGate } from "../src/lib/live-reload";
 import { sessionDate } from "../src/lib/db";
+import { clampStart, formatTime, snapMinutes } from "../src/lib/drag-reschedule";
 import { type RosterInput, buildWeekGrid, pickCurrentWeek } from "../src/lib/schedule";
 
 // This week's brief: model a slice of a real ANU system, wired end to end,
@@ -346,5 +347,35 @@ describe("the timetable page", () => {
     expect(location).toContain("reason=keep+my+typing");
     const html = await (await fetch(new URL(location, baseUrl))).text();
     expect(html).toContain('value="keep my typing"');
+  });
+});
+
+describe("drag-to-reschedule maths", () => {
+  it("snaps a raw drop time to the nearest 15 minutes", () => {
+    expect(snapMinutes(14 * 60 + 7)).toBe(14 * 60);
+    expect(snapMinutes(14 * 60 + 8)).toBe(14 * 60 + 15);
+  });
+
+  it("formats minutes as a zero-padded 24-hour time", () => {
+    expect(formatTime(9 * 60 + 5)).toBe("09:05");
+    expect(formatTime(17 * 60)).toBe("17:00");
+  });
+
+  it("keeps a dragged session inside the visible day", () => {
+    expect(clampStart(7 * 60, 90, 8 * 60, 18 * 60)).toBe(8 * 60);
+    expect(clampStart(17 * 60, 90, 8 * 60, 18 * 60)).toBe(16 * 60 + 30);
+  });
+});
+
+describe("the drag enhancement's markup", () => {
+  it("ships the confirm dialog as a plain post form to the same endpoint", async () => {
+    const html = await (await fetch(new URL("/?week=8", baseUrl))).text();
+    expect(html).toMatch(/<dialog id="move-dialog"[^]*?<form method="post" action="\/api\/exceptions"/);
+  });
+
+  it("tags every session block with the data the drag needs", async () => {
+    const html = await (await fetch(new URL("/?week=8", baseUrl))).text();
+    expect(html).toContain('data-start="14:00"');
+    expect(html).toContain('data-tutor="Ushini Attanayake"');
   });
 });

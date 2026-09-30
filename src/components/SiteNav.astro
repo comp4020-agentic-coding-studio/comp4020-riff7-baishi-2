@@ -1,0 +1,12 @@
+---
+interface Props {
+  current: "timetable" | "about";
+}
+const { current } = Astro.props;
+---
+
+<nav aria-label="site" class="site-nav">
+  <a class="brand" href="/">Crit timetable</a>
+  <a href="/" aria-current={current === "timetable" ? "page" : undefined}>Timetable</a>
+  <a href="/readme/" aria-current={current === "about" ? "page" : undefined}>About</a>
+</nav>

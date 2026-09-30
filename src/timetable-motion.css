@@ -1,0 +1,157 @@
+/* Timetable motion: entrance, hover depth, drag feedback, the 3D view. */
+
+@view-transition {
+  navigation: auto;
+}
+
+/* entrance: blocks rise in one after another */
+
+.block {
+  animation: block-in 0.55s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation-delay: calc(var(--n, 0) * 45ms);
+}
+
+@keyframes block-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.75rem) scale(0.96);
+  }
+}
+
+.block a {
+  transition: transform 0.25s ease, box-shadow 0.25s ease, background 0.2s ease;
+}
+
+.block a:hover {
+  transform: translateY(-2px) scale(1.03);
+  box-shadow: 0 10px 22px rgba(20, 20, 80, 0.22);
+}
+
+.week-strip ol a {
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.week-strip ol a:hover {
+  transform: translateY(-2px);
+}
+
+/* drag */
+
+.block.draggable {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.block.draggable a {
+  cursor: inherit;
+}
+
+.block.dragging {
+  z-index: 20;
+  cursor: grabbing;
+  transition: none;
+}
+
+.block.dragging a {
+  box-shadow: 0 18px 34px rgba(20, 20, 80, 0.35);
+  transition: none;
+}
+
+.drop-ghost {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  z-index: 15;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 0.25rem;
+  pointer-events: none;
+  font-size: 0.75rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border: 2px dashed var(--accent);
+  border-radius: 0.4rem;
+  animation: ghost-in 0.15s ease-out;
+}
+
+.drop-ghost.clash {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  border-color: var(--danger);
+}
+
+@keyframes ghost-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
+.drag-hint {
+  margin: 0 0 1rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+/* confirm dialog */
+
+#move-dialog {
+  width: min(26rem, calc(100vw - 2rem));
+  padding: 1.25rem;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  box-shadow: 0 30px 80px rgba(10, 10, 40, 0.4);
+}
+
+#move-dialog[open] {
+  animation: dialog-in 0.25s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+
+#move-dialog::backdrop {
+  background: rgba(10, 10, 40, 0.45);
+  backdrop-filter: blur(3px);
+}
+
+#move-dialog h2 {
+  margin: 0;
+}
+
+#move-dialog p {
+  margin: 0;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(1rem) scale(0.94);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .block,
+  .drop-ghost,
+  #move-dialog[open] {
+    animation: none;
+  }
+
+  .block a,
+  .week-strip ol a {
+    transition: none;
+  }
+
+  @view-transition {
+    navigation: none;
+  }
+}
